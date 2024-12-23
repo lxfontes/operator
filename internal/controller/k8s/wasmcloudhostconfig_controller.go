@@ -210,7 +210,7 @@ func (r *WasmCloudHostConfigReconciler) reconcileDeployment(ctx context.Context,
 	host := corev1.Container{
 		Name:  "wasmcloud-host",
 		Image: hostImage,
-		//EnvFrom:      mergeEnvFromSource(sandbox.Spec.EnvFrom),
+		// EnvFrom:      mergeEnvFromSource(sandbox.Spec.EnvFrom),
 		Env:          mergeEnvVar(defaultEnv),
 		VolumeMounts: mergeMounts(defaultMounts),
 		Ports: []corev1.ContainerPort{
