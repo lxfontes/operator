@@ -4,34 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
-	"github.com/goccy/go-yaml"
 	"github.com/nats-io/nats.go"
 )
-
-const (
-	LatestVersion = ""
-)
-
-type API interface {
-	// wadm.api.{lattice-id}.model.get
-	ModelList(ctx context.Context) (*ModelListResponse, error)
-	// wadm.api.{lattice-id}.model.get.{name}
-	ModelGet(ctx context.Context, name string, version string) (*ModelGetResponse, error)
-	// wadm.api.{lattice-id}.model.status.{name}
-	ModelStatus(ctx context.Context, name string) (*ModelStatusResponse, error)
-	// wadm.api.{lattice-id}.model.put
-	ModelPut(ctx context.Context, model *Manifest) (*ModelPutResponse, error)
-	// wadm.api.{lattice-id}.model.delete.{name}
-	ModelDelete(ctx context.Context, name string, version string) (*ModelDeleteResponse, error)
-
-	// wadm.api.{lattice-id}.model.deploy.{name}
-	ModelDeploy(ctx context.Context, name string, version string) (*ModelDeployResponse, error)
-	// wadm.api.{lattice-id}.model.undeploy.{name}
-	ModelUndeploy(ctx context.Context, name string) (*ModelUndeployResponse, error)
-}
 
 var _ API = (*Client)(nil)
 
@@ -40,29 +16,12 @@ type Client struct {
 	lattice string
 }
 
+// NewClient creates a new wadm client, using the provided nats connection and lattice id (nats prefix)
 func NewClient(nc *nats.Conn, lattice string) *Client {
 	return &Client{
 		nc:      nc,
 		lattice: lattice,
 	}
-}
-
-func ParseManifest(data []byte) (*Manifest, error) {
-	manifest := &Manifest{}
-	// try to unmarshal as json first, as it errors out faster
-	if err := json.Unmarshal(data, manifest); err == nil {
-		return manifest, nil
-	}
-
-	return manifest, yaml.Unmarshal(data, manifest)
-}
-
-func LoadManifest(path string) (*Manifest, error) {
-	rawManifest, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	return ParseManifest(rawManifest)
 }
 
 func (c *Client) ModelStatus(ctx context.Context, name string) (*ModelStatusResponse, error) {
@@ -102,7 +61,7 @@ func (c *Client) ModelGet(ctx context.Context, name string, version string) (*Mo
 
 func (c *Client) ModelDelete(ctx context.Context, name string, version string) (*ModelDeleteResponse, error) {
 	msg, err := c.newRequest(
-		c.subject("model", "delete", name),
+		c.subject("model", "del", name),
 		&ModelDeployRequest{
 			Version: version,
 		})
@@ -125,7 +84,7 @@ func (c *Client) ModelDeploy(ctx context.Context, name string, version string) (
 }
 
 func (c *Client) ModelUndeploy(ctx context.Context, name string) (*ModelUndeployResponse, error) {
-	msg, err := c.newRequest(c.subject("model", "undeploy"), &ModelUndeployRequest{})
+	msg, err := c.newRequest(c.subject("model", "undeploy", name), &ModelUndeployRequest{})
 	if err != nil {
 		return nil, err
 	}
