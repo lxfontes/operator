@@ -21,7 +21,7 @@ func TestModelList(t *testing.T) {
 		t.Fatalf("failed to create app: %v", err)
 	}
 
-	resp, err := c.ModelList(context.TODO())
+	resp, err := c.ModelList(context.TODO(), &ModelListRequest{})
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -39,7 +39,7 @@ func TestModelGet(t *testing.T) {
 		t.Fatalf("failed to create app: %v", err)
 	}
 
-	resp, err := c.ModelGet(context.TODO(), "test-get", "")
+	resp, err := c.ModelGet(context.TODO(), &ModelGetRequest{Name: "test-get", Version: LatestVersion})
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -58,7 +58,7 @@ func TestModelStatus(t *testing.T) {
 		t.Fatalf("failed to create app: %v", err)
 	}
 
-	resp, err := c.ModelStatus(context.TODO(), "test-status")
+	resp, err := c.ModelStatus(context.TODO(), &ModelStatusRequest{Name: "test-status"})
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -74,7 +74,7 @@ func TestModelPut(t *testing.T) {
 
 	c := NewClient(nc, "default")
 	manifest := newAppManifest("test-put")
-	resp, err := c.ModelPut(context.TODO(), manifest)
+	resp, err := c.ModelPut(context.TODO(), &ModelPutRequest{Manifest: *manifest})
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -93,7 +93,7 @@ func TestModelDelete(t *testing.T) {
 		t.Fatalf("failed to create app: %v", err)
 	}
 
-	resp, err := c.ModelDelete(context.TODO(), "test-delete", LatestVersion)
+	resp, err := c.ModelDelete(context.TODO(), &ModelDeleteRequest{Name: "test-delete", Version: LatestVersion})
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -112,7 +112,7 @@ func TestModelDeploy(t *testing.T) {
 		t.Fatalf("failed to create app: %v", err)
 	}
 
-	resp, err := c.ModelDeploy(context.TODO(), "test-deploy", LatestVersion)
+	resp, err := c.ModelDeploy(context.TODO(), &ModelDeployRequest{Name: "test-deploy", Version: LatestVersion})
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -131,7 +131,7 @@ func TestModelUndeploy(t *testing.T) {
 		t.Fatalf("failed to create app: %v", err)
 	}
 
-	resp, err := c.ModelUndeploy(context.TODO(), "test-undeploy")
+	resp, err := c.ModelUndeploy(context.TODO(), &ModelUndeployRequest{Name: "test-undeploy"})
 	if err != nil {
 		t.Fatalf("%v", err)
 	}

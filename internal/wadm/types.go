@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/goccy/go-yaml"
 )
@@ -37,6 +38,11 @@ func (r DeleteResult) IsError() bool {
 
 func (r DeployResult) IsError() bool {
 	return r != DeployResultAcknowledged
+}
+
+func APISubject(ids ...string) string {
+	parts := append([]string{"wadm", "api"}, ids...)
+	return strings.Join(parts, ".")
 }
 
 const (
@@ -105,12 +111,23 @@ func (m *RawMessage) unmarshal(data []byte) error {
 	return nil
 }
 
+type Error struct {
+	Result  string `json:"result"`
+	Message string `json:"message"`
+}
+
 type Status struct {
 	Status  StatusInfo     `json:"status"`
 	Scalers []ScalerStatus `json:"scalers,omitempty"`
 }
 
-type ModelStatusRequest struct{}
+type ModelStatusRequest struct {
+	Name string `json:"name"`
+}
+
+func (m *ModelStatusRequest) setName(name string) {
+	m.Name = name
+}
 
 type ModelStatusResponse struct {
 	Result  StatusResult `json:"result"`
@@ -119,7 +136,7 @@ type ModelStatusResponse struct {
 }
 
 type ModelPutRequest struct {
-	*Manifest `json:",inline"`
+	Manifest `json:",inline"`
 }
 
 type ModelPutResponse struct {
@@ -157,12 +174,15 @@ type ModelSummary struct {
 	Description     string          `json:"description,omitempty"`
 	DeployedVersion string          `json:"deployed_version,omitempty"`
 	DetailedStatus  *DetailedStatus `json:"detailed_status,omitempty"`
+
+	// Deprecated
+	Status StatusType `json:"status,omitempty"`
 }
 
 type ManifestMetadata struct {
 	Name        string            `json:"name"`
 	Namespace   string            `json:"namespace,omitempty"`
-	Annotations map[string]string `json:"annotations,omitempty"`
+	Annotations map[string]string `json:"annotations"`
 	Labels      map[string]string `json:"labels,omitempty"`
 }
 
@@ -398,7 +418,12 @@ func (m *ModelListResponse) IsError() bool {
 }
 
 type ModelGetRequest struct {
+	Name    string `json:"name"`
 	Version string `json:"version,omitempty"`
+}
+
+func (m *ModelGetRequest) setName(name string) {
+	m.Name = name
 }
 
 type ModelGetResponse struct {
@@ -408,7 +433,12 @@ type ModelGetResponse struct {
 }
 
 type ModelDeleteRequest struct {
+	Name    string `json:"name"`
 	Version string `json:"version,omitempty"`
+}
+
+func (m *ModelDeleteRequest) setName(name string) {
+	m.Name = name
 }
 
 type ModelDeleteResponse struct {
@@ -418,7 +448,12 @@ type ModelDeleteResponse struct {
 }
 
 type ModelDeployRequest struct {
+	Name    string `json:"name"`
 	Version string `json:"version,omitempty"`
+}
+
+func (m *ModelDeployRequest) setName(name string) {
+	m.Name = name
 }
 
 type ModelDeployResponse struct {
@@ -429,7 +464,13 @@ type ModelDeployResponse struct {
 }
 
 type ModelUndeployRequest struct {
+	Name string `json:"name"`
 }
+
+func (m *ModelUndeployRequest) setName(name string) {
+	m.Name = name
+}
+
 type ModelUndeployResponse struct {
 	Result  DeployResult `json:"result"`
 	Message string       `json:"message"`

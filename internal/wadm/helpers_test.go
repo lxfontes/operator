@@ -28,7 +28,7 @@ func checkWadm() error {
 	c := NewClient(nc, "default")
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
-	_, err = c.ModelList(ctx)
+	_, err = c.ModelList(ctx, &ModelListRequest{})
 	return err
 }
 
@@ -86,7 +86,7 @@ func withWash(t *testing.T) (*nats.Conn, func(*testing.T)) {
 
 func createApp(c *Client, name string) error {
 	manifest := newAppManifest(name)
-	resp, err := c.ModelPut(context.TODO(), manifest)
+	resp, err := c.ModelPut(context.TODO(), &ModelPutRequest{Manifest: *manifest})
 	if err != nil {
 		return err
 	}

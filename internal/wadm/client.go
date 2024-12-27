@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/nats-io/nats.go"
 )
@@ -24,22 +23,18 @@ func NewClient(nc *nats.Conn, lattice string) *Client {
 	}
 }
 
-func (c *Client) ModelStatus(ctx context.Context, name string) (*ModelStatusResponse, error) {
+func (c *Client) ModelStatus(ctx context.Context, req *ModelStatusRequest) (*ModelStatusResponse, error) {
 	msg, err := c.newRequest(
-		c.subject("model", "status", name),
-		&ModelStatusRequest{})
+		c.subject("model", "status", req.Name),
+		req)
 	if err != nil {
 		return nil, err
 	}
 	return runRequest(ctx, c.nc, msg, &ModelStatusResponse{})
 }
 
-func (c *Client) ModelPut(ctx context.Context, model *Manifest) (*ModelPutResponse, error) {
-	msg, err := c.newRequest(
-		c.subject("model", "put"),
-		&ModelPutRequest{
-			Manifest: model,
-		})
+func (c *Client) ModelPut(ctx context.Context, req *ModelPutRequest) (*ModelPutResponse, error) {
+	msg, err := c.newRequest(c.subject("model", "put"), req)
 	if err != nil {
 		return nil, err
 	}
@@ -47,52 +42,40 @@ func (c *Client) ModelPut(ctx context.Context, model *Manifest) (*ModelPutRespon
 	return runRequest(ctx, c.nc, msg, &ModelPutResponse{})
 }
 
-func (c *Client) ModelGet(ctx context.Context, name string, version string) (*ModelGetResponse, error) {
-	msg, err := c.newRequest(
-		c.subject("model", "get", name),
-		&ModelDeployRequest{
-			Version: version,
-		})
+func (c *Client) ModelGet(ctx context.Context, req *ModelGetRequest) (*ModelGetResponse, error) {
+	msg, err := c.newRequest(c.subject("model", "get", req.Name), req)
 	if err != nil {
 		return nil, err
 	}
 	return runRequest(ctx, c.nc, msg, &ModelGetResponse{})
 }
 
-func (c *Client) ModelDelete(ctx context.Context, name string, version string) (*ModelDeleteResponse, error) {
-	msg, err := c.newRequest(
-		c.subject("model", "del", name),
-		&ModelDeployRequest{
-			Version: version,
-		})
+func (c *Client) ModelDelete(ctx context.Context, req *ModelDeleteRequest) (*ModelDeleteResponse, error) {
+	msg, err := c.newRequest(c.subject("model", "del", req.Name), req)
 	if err != nil {
 		return nil, err
 	}
 	return runRequest(ctx, c.nc, msg, &ModelDeleteResponse{})
 }
 
-func (c *Client) ModelDeploy(ctx context.Context, name string, version string) (*ModelDeployResponse, error) {
-	msg, err := c.newRequest(
-		c.subject("model", "deploy", name),
-		&ModelDeployRequest{
-			Version: version,
-		})
+func (c *Client) ModelDeploy(ctx context.Context, req *ModelDeployRequest) (*ModelDeployResponse, error) {
+	msg, err := c.newRequest(c.subject("model", "deploy", req.Name), req)
 	if err != nil {
 		return nil, err
 	}
 	return runRequest(ctx, c.nc, msg, &ModelDeployResponse{})
 }
 
-func (c *Client) ModelUndeploy(ctx context.Context, name string) (*ModelUndeployResponse, error) {
-	msg, err := c.newRequest(c.subject("model", "undeploy", name), &ModelUndeployRequest{})
+func (c *Client) ModelUndeploy(ctx context.Context, req *ModelUndeployRequest) (*ModelUndeployResponse, error) {
+	msg, err := c.newRequest(c.subject("model", "undeploy", req.Name), &ModelUndeployRequest{})
 	if err != nil {
 		return nil, err
 	}
 	return runRequest(ctx, c.nc, msg, &ModelUndeployResponse{})
 }
 
-func (c *Client) ModelList(ctx context.Context) (*ModelListResponse, error) {
-	msg, err := c.newRequest(c.subject("model", "get"), &ModelListRequest{})
+func (c *Client) ModelList(ctx context.Context, req *ModelListRequest) (*ModelListResponse, error) {
+	msg, err := c.newRequest(c.subject("model", "get"), req)
 	if err != nil {
 		return nil, err
 	}
@@ -100,8 +83,8 @@ func (c *Client) ModelList(ctx context.Context) (*ModelListResponse, error) {
 }
 
 func (c *Client) subject(ids ...string) string {
-	parts := append([]string{"wadm", "api", c.lattice}, ids...)
-	return strings.Join(parts, ".")
+	parts := append([]string{c.lattice}, ids...)
+	return APISubject(parts...)
 }
 
 func (c *Client) newRequest(subject string, payload any) (*nats.Msg, error) {
