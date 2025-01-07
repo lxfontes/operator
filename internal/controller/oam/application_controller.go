@@ -147,9 +147,8 @@ func (r *ApplicationReconciler) reconcileStatus(ctx context.Context, application
 		return fmt.Errorf("model status error: %s", resp.Message)
 	}
 
-	var scalers []coreoamv1beta1.ScalerStatus
+	scalers := []coreoamv1beta1.ScalerStatus{}
 	for _, scaler := range resp.Status.Scalers {
-		// do something with the scaler
 		scalers = append(scalers, coreoamv1beta1.ScalerStatus{
 			Id:      scaler.Id,
 			Kind:    scaler.Kind,
