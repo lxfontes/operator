@@ -5,10 +5,37 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - services/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - services/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - apps
   resources:
   - daemonsets
   - deployments
+  - statefulsets
   verbs:
   - create
   - delete
@@ -21,38 +48,14 @@ rules:
   - apps
   resources:
   - daemonsets/finalizers
+  - statefulsets/finalizers
   verbs:
   - update
 - apiGroups:
   - apps
   resources:
   - daemonsets/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - core.oam.dev
-  resources:
-  - applications
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - core.oam.dev
-  resources:
-  - applications/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - core.oam.dev
-  resources:
-  - applications/status
+  - statefulsets/status
   verbs:
   - get
   - patch
@@ -60,6 +63,7 @@ rules:
 - apiGroups:
   - k8s.wasmcloud.dev
   resources:
+  - clusters
   - wasmcloudhostconfigs
   verbs:
   - create
@@ -72,12 +76,14 @@ rules:
 - apiGroups:
   - k8s.wasmcloud.dev
   resources:
+  - clusters/finalizers
   - wasmcloudhostconfigs/finalizers
   verbs:
   - update
 - apiGroups:
   - k8s.wasmcloud.dev
   resources:
+  - clusters/status
   - wasmcloudhostconfigs/status
   verbs:
   - get

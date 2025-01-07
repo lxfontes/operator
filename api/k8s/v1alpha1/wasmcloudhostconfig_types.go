@@ -146,7 +146,7 @@ type WasmCloudHostConfigStatus struct {
 
 	// +kubebuilder:validation:Optional
 	Apps []ApplicationStatus `json:"apps"`
-	// NOTE(lxf): This should be 'appCount', 'app_count' is coming from the Rust Operator.
+	// NOTE(lxf): This should be 'appCount', 'app_count' is coming from the Rust Operator missing a serde config.
 	// +kubebuilder:validation:Optional
 	AppCount uint32 `json:"app_count"`
 }

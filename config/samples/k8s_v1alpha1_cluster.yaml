@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cosmonic-operator
+data:
+  config: |
+    nats:
+      managed: true
+    # or
+      host: "nats.default.svc.cluster.local"
+      port: 4222
+    wadm:
+      managed: true
+    # or
+      subject: "wadm.api.v1"
+    addons:
+      # kubernetes secrets backend
+      secrets:
+        # namespaces that can serve secrets
+        namespaceSelector:
+          matchLabels:
+            "k8s.wasmcloud.dev/visible": "true"
+      # policy service
+      policy:
+        inline: |
+          package wasmcloud.authz
+
+          default allow = false
+
+          allow {
+            input.wit.namespace == "wasi"
+            input.wit.package == "http"
+            input.wit.interface == "incoming-handler"
+            input.target.component == "console"
+          }
+        # or
+        secret:
+          name: "my-policy"
+          key: "policy.rego"
+      opentelemetry:
+        insecure: true
+        endpoint: "http://otel-collector.default.svc.cluster.local:4317"
+    hostGroups:
+      # a default host groups
+      # 1 pod per node
+      - name: "default"
+      # custom host group
+      # 1 pod on nodes matching 'nodeSelector'
+      - name: "custom"
+        hostLabels:
+          "this": "that"
+        spec:
+          labels:
+            "k8sthis": "that"
+          nodeSelector:
+            "k8sthis": "that"
+          env:
+            - name: "K8S_THIS"
+              value: "that"
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          imagePullSecrets:
+            - name: "myregistrykey"
+          volumes:
+            - name: "myvolume"
+              emptyDir: {}
+          volumeMounts:
+            - name: "myvolume"
+              mountPath: "/var/lib/myvolume"

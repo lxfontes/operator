@@ -27,4 +27,13 @@ resources:
   kind: WasmCloudHostConfig
   path: go.wasmcloud.dev/operator/api/k8s/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: wasmcloud.dev
+  group: k8s
+  kind: Cluster
+  path: go.wasmcloud.dev/operator/api/k8s/v1alpha1
+  version: v1alpha1
 version: "3"

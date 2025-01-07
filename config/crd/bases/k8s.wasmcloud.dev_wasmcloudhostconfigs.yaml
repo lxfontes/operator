@@ -2059,7 +2059,7 @@ spec:
             properties:
               app_count:
                 description: 'NOTE(lxf): This should be ''appCount'', ''app_count''
-                  is coming from the Rust Operator.'
+                  is coming from the Rust Operator missing a serde config.'
                 format: int32
                 type: integer
               apps:

@@ -18,41 +18,170 @@ package oam
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	coreoamv1beta1 "go.wasmcloud.dev/operator/api/oam/core/v1beta1"
+	"go.wasmcloud.dev/x/wasmbus"
+	"go.wasmcloud.dev/x/wasmbus/wadm"
 )
+
+const applicationRefreshInterval = 30 * time.Second
+const myFinalizerName = "k8s.wasmcloud.dev/finalizer"
 
 // ApplicationReconciler reconciles a Application object
 type ApplicationReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	Bus    wasmbus.Bus
 }
 
 // +kubebuilder:rbac:groups=core.oam.dev,resources=applications,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core.oam.dev,resources=applications/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core.oam.dev,resources=applications/finalizers,verbs=update
-
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Application object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.19.1/pkg/reconcile
 func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	logger.Info("Reconciling Application")
 
-	// TODO(user): your logic here
+	var application coreoamv1beta1.Application
+	if err := r.Get(ctx, req.NamespacedName, &application); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
 
-	return ctrl.Result{}, nil
+	if !application.DeletionTimestamp.IsZero() {
+		// deletion timestamp is set.
+		// cleanup resources if we have a finalizer.
+		if controllerutil.ContainsFinalizer(&application, myFinalizerName) {
+			if err := r.finalize(ctx, &application); err != nil {
+				logger.Error(err, "unable to finalize application")
+				return ctrl.Result{}, err
+			}
+
+			controllerutil.RemoveFinalizer(&application, myFinalizerName)
+			if err := r.Update(ctx, &application); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+
+		return ctrl.Result{}, nil
+	}
+
+	if err := r.reconcileSpec(ctx, &application); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if err := r.reconcileStatus(ctx, &application); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{RequeueAfter: applicationRefreshInterval}, nil
+}
+
+func (r *ApplicationReconciler) reconcileSpec(ctx context.Context, application *coreoamv1beta1.Application) error {
+	if application.Status.ObservedGeneration == application.Generation {
+		return nil
+	}
+
+	// ensure finalizer
+	if !controllerutil.ContainsFinalizer(application, myFinalizerName) {
+		controllerutil.AddFinalizer(application, myFinalizerName)
+		if err := r.Update(ctx, application); err != nil {
+			return err
+		}
+	}
+
+	rawSpec, err := json.Marshal(application)
+	if err != nil {
+		return err
+	}
+
+	wadmManifest, err := wadm.ParseJSONManifest(rawSpec)
+	if err != nil {
+		return err
+	}
+
+	c := r.wadmClient(application)
+	putResp, err := c.ModelPut(ctx, &wadm.ModelPutRequest{
+		Manifest: *wadmManifest,
+	})
+	if err != nil {
+		return err
+	}
+	if putResp.IsError() {
+		return fmt.Errorf("model put error: %s", putResp.Message)
+	}
+
+	deployResp, err := c.ModelDeploy(ctx, &wadm.ModelDeployRequest{
+		Name: application.Name,
+	})
+	if err != nil {
+		return err
+	}
+	if deployResp.IsError() {
+		return fmt.Errorf("model deploy error: %s", deployResp.Message)
+	}
+
+	application.Status.ObservedGeneration = application.Generation
+	application.Status.ObservedVersion = deployResp.Version
+
+	return r.Status().Update(ctx, application)
+}
+
+func (r *ApplicationReconciler) reconcileStatus(ctx context.Context, application *coreoamv1beta1.Application) error {
+	c := r.wadmClient(application)
+	req := &wadm.ModelStatusRequest{
+		Name: application.Name,
+	}
+	resp, err := c.ModelStatus(ctx, req)
+	if err != nil {
+		return err
+	}
+	if resp.IsError() {
+		return fmt.Errorf("model status error: %s", resp.Message)
+	}
+
+	var scalers []coreoamv1beta1.ScalerStatus
+	for _, scaler := range resp.Status.Scalers {
+		// do something with the scaler
+		scalers = append(scalers, coreoamv1beta1.ScalerStatus{
+			Id:      scaler.Id,
+			Kind:    scaler.Kind,
+			Name:    scaler.Name,
+			Status:  string(scaler.Status.Type),
+			Message: scaler.Status.Message,
+		})
+	}
+
+	application.Status.ScalerStatus = scalers
+	application.Status.Phase = wadmStatusToPhase(resp.Status.Status.Type)
+
+	return r.Status().Update(ctx, application)
+}
+
+func (r *ApplicationReconciler) finalize(ctx context.Context, application *coreoamv1beta1.Application) error {
+	if application.Status.ObservedVersion == "" {
+		// never deployed, nothing to do
+		return nil
+	}
+
+	c := r.wadmClient(application)
+
+	_, err := c.ModelDelete(ctx, &wadm.ModelDeleteRequest{
+		Name: application.Name,
+	})
+
+	return err
+}
+
+func (r *ApplicationReconciler) wadmClient(application *coreoamv1beta1.Application) *wadm.Client {
+	return wadm.NewClient(r.Bus, application.GetNamespace())
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -61,4 +190,9 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&coreoamv1beta1.Application{}).
 		Named("oam-application").
 		Complete(r)
+}
+
+func wadmStatusToPhase(status wadm.StatusType) coreoamv1beta1.ApplicationPhase {
+	// TODO(lxf): keeping this so we can translate the status from wadm to oam
+	return coreoamv1beta1.ApplicationPhase(status)
 }

@@ -18,36 +18,12 @@ package v1beta1
 
 import (
 	"go.wasmcloud.dev/operator/api/condition"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
 // ApplicationPhase is a label for the condition of an application at the current time
 type ApplicationPhase string
-
-const (
-	// ApplicationStarting means the app is preparing for reconcile
-	ApplicationStarting ApplicationPhase = "starting"
-	// ApplicationRendering means the app is rendering
-	ApplicationRendering ApplicationPhase = "rendering"
-	// ApplicationPolicyGenerating means the app is generating policies
-	ApplicationPolicyGenerating ApplicationPhase = "generatingPolicy"
-	// ApplicationRunningWorkflow means the app is running workflow
-	ApplicationRunningWorkflow ApplicationPhase = "runningWorkflow"
-	// ApplicationWorkflowSuspending means the app's workflow is suspending
-	ApplicationWorkflowSuspending ApplicationPhase = "workflowSuspending"
-	// ApplicationWorkflowTerminated means the app's workflow is terminated
-	ApplicationWorkflowTerminated ApplicationPhase = "workflowTerminated"
-	// ApplicationWorkflowFailed means the app's workflow is failed
-	ApplicationWorkflowFailed ApplicationPhase = "workflowFailed"
-	// ApplicationRunning means the app finished rendering and applied result to the cluster
-	ApplicationRunning ApplicationPhase = "running"
-	// ApplicationUnhealthy means the app finished rendering and applied result to the cluster, but still unhealthy
-	ApplicationUnhealthy ApplicationPhase = "unhealthy"
-	// ApplicationDeleting means application is being deleted
-	ApplicationDeleting ApplicationPhase = "deleting"
-)
 
 type ApplicationTrait struct {
 	Type string `json:"type"`
@@ -109,6 +85,14 @@ type Revision struct {
 	RevisionHash string `json:"revisionHash,omitempty"`
 }
 
+type ScalerStatus struct {
+	Id      string `json:"id"`
+	Kind    string `json:"kind"`
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+	Message string `json:"message,omitempty"`
+}
+
 // ApplicationStatus defines the observed state of Application.
 type ApplicationStatus struct {
 	condition.ConditionedStatus `json:",inline"`
@@ -117,17 +101,17 @@ type ApplicationStatus struct {
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
-	Phase ApplicationPhase `json:"status,omitempty"`
-
-	// Components record the related Components created by Application Controller
-	Components []corev1.ObjectReference `json:"components,omitempty"`
-
-	// Services record the status of the application services
-	Services []ApplicationComponentStatus `json:"services,omitempty"`
-
-	// LatestRevision of the application configuration it generates
+	// The version observed by wadm.
 	// +optional
-	LatestRevision *Revision `json:"latestRevision,omitempty"`
+	ObservedVersion string `json:"observedVersion,omitempty"`
+
+	// The wadm status.
+	// +optional
+	Phase ApplicationPhase `json:"phase,omitempty"`
+
+	// Status for each wadm scaler.
+	// +optional
+	ScalerStatus []ScalerStatus `json:"scalerStatus,omitempty"`
 }
 
 // +kubebuilder:object:root=true
