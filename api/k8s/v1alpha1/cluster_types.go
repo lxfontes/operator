@@ -125,6 +125,7 @@ type ClusterStatus struct {
 // +kubebuilder:subresource:status
 
 // Cluster is the Schema for the clusters API.
+// This type is not used directly and may be implemented in the future.
 type Cluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

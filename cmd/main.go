@@ -167,9 +167,10 @@ func main() {
 	bus := wasmbus.NewNatsBus(nc)
 
 	if err = (&oamcontroller.ApplicationReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Bus:    bus,
+		Client:  mgr.GetClient(),
+		Scheme:  mgr.GetScheme(),
+		Bus:     bus,
+		Lattice: lattice,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Application")
 		os.Exit(1)

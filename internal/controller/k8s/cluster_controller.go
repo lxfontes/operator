@@ -33,9 +33,11 @@ type ClusterReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=k8s.wasmcloud.dev,resources=clusters,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=k8s.wasmcloud.dev,resources=clusters/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=k8s.wasmcloud.dev,resources=clusters/finalizers,verbs=update
+// NOTE(lxf): Disabled as we are not using this type.
+// ClusterSpec & Status reconciliation updates configmaps.
+// kubebuilder:rbac:groups=k8s.wasmcloud.dev,resources=clusters,verbs=get;list;watch;create;update;patch;delete
+// kubebuilder:rbac:groups=k8s.wasmcloud.dev,resources=clusters/status,verbs=get;update;patch
+// kubebuilder:rbac:groups=k8s.wasmcloud.dev,resources=clusters/finalizers,verbs=update
 
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=statefulsets/status,verbs=get;update;patch

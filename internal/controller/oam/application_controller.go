@@ -33,14 +33,18 @@ import (
 	"go.wasmcloud.dev/x/wasmbus/wadm"
 )
 
-const applicationRefreshInterval = 30 * time.Second
-const myFinalizerName = "k8s.wasmcloud.dev/finalizer"
+const applicationRefreshInterval = 5 * time.Second
+const applicationFinalizer = "k8s.wasmcloud.dev/application-finalizer"
 
 // ApplicationReconciler reconciles a Application object
 type ApplicationReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 	Bus    wasmbus.Bus
+	// Which lattice to place Application objects.
+	// Will use the object namespace if blank.
+	// wasmcloud clusters usually operate on a single 'default' lattice.
+	Lattice string
 }
 
 // +kubebuilder:rbac:groups=core.oam.dev,resources=applications,verbs=get;list;watch;create;update;patch;delete
@@ -48,7 +52,6 @@ type ApplicationReconciler struct {
 // +kubebuilder:rbac:groups=core.oam.dev,resources=applications/finalizers,verbs=update
 func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-	logger.Info("Reconciling Application")
 
 	var application coreoamv1beta1.Application
 	if err := r.Get(ctx, req.NamespacedName, &application); err != nil {
@@ -58,13 +61,13 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if !application.DeletionTimestamp.IsZero() {
 		// deletion timestamp is set.
 		// cleanup resources if we have a finalizer.
-		if controllerutil.ContainsFinalizer(&application, myFinalizerName) {
+		if controllerutil.ContainsFinalizer(&application, applicationFinalizer) {
 			if err := r.finalize(ctx, &application); err != nil {
 				logger.Error(err, "unable to finalize application")
 				return ctrl.Result{}, err
 			}
 
-			controllerutil.RemoveFinalizer(&application, myFinalizerName)
+			controllerutil.RemoveFinalizer(&application, applicationFinalizer)
 			if err := r.Update(ctx, &application); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -90,8 +93,8 @@ func (r *ApplicationReconciler) reconcileSpec(ctx context.Context, application *
 	}
 
 	// ensure finalizer
-	if !controllerutil.ContainsFinalizer(application, myFinalizerName) {
-		controllerutil.AddFinalizer(application, myFinalizerName)
+	if !controllerutil.ContainsFinalizer(application, applicationFinalizer) {
+		controllerutil.AddFinalizer(application, applicationFinalizer)
 		if err := r.Update(ctx, application); err != nil {
 			return err
 		}
@@ -175,12 +178,23 @@ func (r *ApplicationReconciler) finalize(ctx context.Context, application *coreo
 	_, err := c.ModelDelete(ctx, &wadm.ModelDeleteRequest{
 		Name: application.Name,
 	})
+	if err != nil {
+		return err
+	}
 
-	return err
+	return nil
+}
+
+func (r *ApplicationReconciler) lattice(application *coreoamv1beta1.Application) string {
+	lattice := r.Lattice
+	if lattice == "" {
+		lattice = application.GetNamespace()
+	}
+	return lattice
 }
 
 func (r *ApplicationReconciler) wadmClient(application *coreoamv1beta1.Application) *wadm.Client {
-	return wadm.NewClient(r.Bus, application.GetNamespace())
+	return wadm.NewClient(r.Bus, r.lattice(application))
 }
 
 // SetupWithManager sets up the controller with the Manager.

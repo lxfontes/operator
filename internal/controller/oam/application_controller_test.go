@@ -18,6 +18,8 @@ package oam
 
 import (
 	"context"
+	"encoding/json"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -25,68 +27,122 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	coreoamv1beta1 "go.wasmcloud.dev/operator/api/oam/core/v1beta1"
+	"go.wasmcloud.dev/x/wasmbus/wadm"
 )
 
 var _ = Describe("Application Controller", func() {
 	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
 
 		ctx := context.Background()
 
-		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
-		}
-		application := &coreoamv1beta1.Application{}
-
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind Application")
-			err := k8sClient.Get(ctx, typeNamespacedName, application)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &coreoamv1beta1.Application{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-					},
-					Spec: coreoamv1beta1.ApplicationSpec{
-						Components: []coreoamv1beta1.ApplicationComponent{
-							{
-								Name: "test-component",
-								Type: "test-type",
-							},
-						},
-					},
-					// TODO(user): Specify other spec details if needed.
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
+
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
+		})
+
+		It("should successfully reconcile the resource", func() {
+			const resourceName = "test-reconcile"
+			typeNamespacedName := types.NamespacedName{
+				Name:      resourceName,
+				Namespace: "default",
+			}
+			By("creating the custom resource for the Kind Application")
 			resource := &coreoamv1beta1.Application{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
+			if err != nil && errors.IsNotFound(err) {
+				wadmManifest, err := wadm.LoadManifest("testdata/application.yaml")
+				Expect(err).NotTo(HaveOccurred())
+				rawManifest, err := wadmManifest.ToJSON()
+				Expect(err).NotTo(HaveOccurred())
+				err = json.Unmarshal(rawManifest, resource)
+				Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance Application")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
-			controllerReconciler := &ApplicationReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				resource.Name = resourceName
+				resource.Namespace = "default"
+
+				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
 
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+			By("Reconciling the created resource")
+			controllerReconciler := &ApplicationReconciler{
+				Client:  k8sClient,
+				Scheme:  k8sClient.Scheme(),
+				Bus:     bus,
+				Lattice: "default",
+			}
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+
+			err = k8sClient.Get(ctx, typeNamespacedName, resource)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(resource.Status.ObservedVersion).To(Not(Equal("")))
+			Expect(resource.Status.ObservedGeneration).To(Equal(resource.Generation))
+			Expect(resource.Status.Phase).NotTo(Equal(coreoamv1beta1.ApplicationPhase("")))
+
+			By("Deleting resource")
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+		})
+
+		It("should update the resource status", func() {
+			const resourceName = "test-update"
+			typeNamespacedName := types.NamespacedName{
+				Name:      resourceName,
+				Namespace: "default",
+			}
+			By("creating the custom resource for the Kind Application")
+			resource := &coreoamv1beta1.Application{}
+			err := k8sClient.Get(ctx, typeNamespacedName, resource)
+			if err != nil && errors.IsNotFound(err) {
+				wadmManifest, err := wadm.LoadManifest("testdata/application.yaml")
+				Expect(err).NotTo(HaveOccurred())
+				rawManifest, err := wadmManifest.ToJSON()
+				Expect(err).NotTo(HaveOccurred())
+				err = json.Unmarshal(rawManifest, resource)
+				Expect(err).NotTo(HaveOccurred())
+
+				resource.Name = resourceName
+				resource.Namespace = "default"
+
+				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			}
+
+			By("Reconciling the created resource until it is ready")
+			controllerReconciler := &ApplicationReconciler{
+				Client:  k8sClient,
+				Scheme:  k8sClient.Scheme(),
+				Bus:     bus,
+				Lattice: "default",
+			}
+
+			attempts := 15
+			deployed := false
+			for i := 0; i < attempts; i++ {
+				<-time.After(5 * time.Second)
+				_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+					NamespacedName: typeNamespacedName,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				err = k8sClient.Get(ctx, typeNamespacedName, resource)
+				Expect(err).NotTo(HaveOccurred())
+				if resource.Status.Phase == coreoamv1beta1.ApplicationPhase("deployed") {
+					deployed = true
+					break
+				}
+			}
+			Expect(deployed).To(BeTrue())
+			// component + provider + link
+			Expect(resource.Status.ScalerStatus).To(HaveLen(3))
+
+			By("Deleting resource")
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
 	})
 })

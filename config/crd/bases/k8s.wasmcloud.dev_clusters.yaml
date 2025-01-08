@@ -17,7 +17,9 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Cluster is the Schema for the clusters API.
+        description: |-
+          Cluster is the Schema for the clusters API.
+          This type is not used directly and may be implemented in the future.
         properties:
           apiVersion:
             description: |-

@@ -34,6 +34,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	coreoamv1beta1 "go.wasmcloud.dev/operator/api/oam/core/v1beta1"
+	"go.wasmcloud.dev/x/wasmbus"
+	"go.wasmcloud.dev/x/wasmbus/wasmbustest"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -46,6 +48,7 @@ var (
 	testEnv   *envtest.Environment
 	ctx       context.Context
 	cancel    context.CancelFunc
+	bus       wasmbus.Bus
 )
 
 func TestControllers(t *testing.T) {
@@ -81,6 +84,14 @@ var _ = BeforeSuite(func() {
 
 	err = coreoamv1beta1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
+
+	By("setting up wash")
+	nc, washOff := wasmbustest.WithWash(GinkgoT())
+	bus = wasmbus.NewNatsBus(nc)
+
+	DeferCleanup(func() {
+		washOff(GinkgoT())
+	})
 
 	// +kubebuilder:scaffold:scheme
 
