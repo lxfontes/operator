@@ -4,42 +4,39 @@ metadata:
   name: cosmonic-operator
 data:
   config: |
-    nats:
-      managed: true
-    # or
-      host: "nats.default.svc.cluster.local"
-      port: 4222
-    wadm:
-      managed: true
-    # or
-      subject: "wadm.api.v1"
+    # these should be config vars
+    mode:
+      # built-in nats & k8s scheduler.
+      managed:
+        namespaceSelector:
+          matchLabels:
+            "k8s.wasmcloud.dev/": "true"
+    # or custom nats & wadm.
+    # in this mode the operator will not perform scheduling operations.
+      sidecar:
+        nats:
+          host: "nats.default.svc.cluster.local"
+          port: 4222
+        wadm:
+          subject: "wadm.api.v1"
     addons:
       # kubernetes secrets backend
       secrets:
-        # namespaces that can serve secrets
-        namespaceSelector:
-          matchLabels:
-            "k8s.wasmcloud.dev/visible": "true"
+        enable: true # default
       # policy service
       policy:
-        inline: |
-          package wasmcloud.authz
-
-          default allow = false
-
-          allow {
-            input.wit.namespace == "wasi"
-            input.wit.package == "http"
-            input.wit.interface == "incoming-handler"
-            input.target.component == "console"
-          }
-        # or
+        enable: false # default
         secret:
+          name: "my-policy"
+          key: "policy.rego"
+        # or
+        configmap:
           name: "my-policy"
           key: "policy.rego"
       opentelemetry:
         insecure: true
         endpoint: "http://otel-collector.default.svc.cluster.local:4317"
+
     hostGroups:
       # a default host groups
       # 1 pod per node
