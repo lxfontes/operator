@@ -22,50 +22,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-type ContainerSpec struct {
-	Image                    string                        `json:"image,omitempty"`
-	Command                  []string                      `json:"command,omitempty"`
-	Args                     []string                      `json:"args,omitempty"`
-	WorkingDir               string                        `json:"workingDir,omitempty"`
-	Env                      []corev1.EnvVar               `json:"env,omitempty"`
-	EnvFrom                  []corev1.EnvFromSource        `json:"envFrom,omitempty"`
-	ImagePullSecrets         []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
-	ImagePullPolicy          corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
-	Resources                corev1.ResourceRequirements   `json:"resources,omitempty"`
-	ContainerSecurityContext corev1.SecurityContext        `json:"containerSecurityContext,omitempty"`
-	ReadinessProbe           *corev1.Probe                 `json:"readinessProbe,omitempty"`
-	LivenessProbe            *corev1.Probe                 `json:"livenessProbe,omitempty"`
-	VolumeMounts             []corev1.VolumeMount          `json:"volumeMounts,omitempty"`
-}
-
-type ReplicaSpec struct {
-	Labels                       map[string]string                 `json:"labels,omitempty"`
-	Affinity                     *corev1.Affinity                  `json:"affinity,omitempty"`
-	AutomountServiceAccountToken *bool                             `json:"automountServiceAccountToken,omitempty"`
-	NodeSelector                 map[string]string                 `json:"nodeSelector,omitempty"`
-	Tolerations                  []corev1.Toleration               `json:"tolerations,omitempty"`
-	TopologySpreadConstraints    []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
-	SecurityContext              corev1.PodSecurityContext         `json:"securityContext,omitempty"`
-	InitContainers               []ContainerSpec                   `json:"initContainers,omitempty"`
-	Volumes                      []corev1.Volume                   `json:"volumes,omitempty"`
-}
-
-type HostGroupSpec struct {
-	ReplicaSpec   `json:",inline"`
-	ContainerSpec `json:",inline"`
-}
-
-// HostGroup defines the desired state of HostGroup.
-type HostGroup struct {
-	// +kubebuilder:validation:Required
-	Name string `json:"name,omitempty"`
-	// +kubebuilder:validation:Optional
-	HostLabels map[string]string `json:"hostLabels,omitempty"`
-
-	// customizations
-	Spec *HostGroupSpec `json:"spec,omitempty"`
-}
-
 type NatsSpec struct {
 	// +kubebuilder:validation:Optional
 	Managed *bool `json:"managed,omitempty"`
@@ -96,10 +52,9 @@ type ClusterAddons struct {
 
 // ClusterSpec defines the desired state of Cluster.
 type ClusterSpec struct {
-	HostGroups []HostGroupSpec `json:"hostGroups,omitempty"`
-	Nats       NatsSpec        `json:"nats"`
-	Wadm       WadmSpec        `json:"wadm"`
-	Addons     ClusterAddons   `json:"addons"`
+	Nats   NatsSpec      `json:"nats"`
+	Wadm   WadmSpec      `json:"wadm"`
+	Addons ClusterAddons `json:"addons"`
 }
 
 type NatsStatus struct {
@@ -110,15 +65,10 @@ type WadmStatus struct {
 	Managed bool `json:"managed"`
 }
 
-type HostGroupStatus struct {
-	Name string `json:"name,omitempty"`
-}
-
 // ClusterStatus defines the observed state of Cluster.
 type ClusterStatus struct {
 	condition.ConditionedStatus `json:",inline"`
-	HostGroups                  []HostGroupStatus `json:"hostGroups,omitempty"`
-	ObservedGeneration          int64             `json:"observedGeneration,omitempty"`
+	ObservedGeneration          int64 `json:"observedGeneration,omitempty"`
 }
 
 // +kubebuilder:object:root=true

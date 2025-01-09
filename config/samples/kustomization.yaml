@@ -3,4 +3,5 @@ resources:
 - oam_v1beta1_application.yaml
 - k8s_v1alpha1_wasmcloudhostconfig.yaml
 - k8s_v1alpha1_cluster.yaml
+- k8s_v1alpha1_hostgroup.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

@@ -63,6 +63,7 @@ rules:
 - apiGroups:
   - k8s.wasmcloud.dev
   resources:
+  - hostgroups
   - wasmcloudhostconfigs
   verbs:
   - create
@@ -75,12 +76,14 @@ rules:
 - apiGroups:
   - k8s.wasmcloud.dev
   resources:
+  - hostgroups/finalizers
   - wasmcloudhostconfigs/finalizers
   verbs:
   - update
 - apiGroups:
   - k8s.wasmcloud.dev
   resources:
+  - hostgroups/status
   - wasmcloudhostconfigs/status
   verbs:
   - get
