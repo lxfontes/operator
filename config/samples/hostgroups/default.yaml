@@ -1,0 +1,13 @@
+# A sample default hostgroup.
+# Runs one pod per kubernetes node.
+apiVersion: k8s.wasmcloud.dev/v1alpha1
+kind: HostGroup
+metadata:
+  name: default
+spec:
+  lattice: default
+  env:
+    - name: WASMCLOUD_POLICY_TOPIC
+      value: wasmcloud.policy
+    - name: WASMCLOUD_CONFIG_SERVICE
+      value: "true"

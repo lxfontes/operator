@@ -1,9 +1,0 @@
-apiVersion: k8s.wasmcloud.dev/v1alpha1
-kind: HostGroup
-metadata:
-  labels:
-    app.kubernetes.io/name: operator
-    app.kubernetes.io/managed-by: kustomize
-  name: hostgroup-sample
-spec:
-  # TODO(user): Add fields here

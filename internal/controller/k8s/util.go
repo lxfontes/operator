@@ -28,15 +28,15 @@ func mergeMounts(mounts ...[]corev1.VolumeMount) []corev1.VolumeMount {
 	return ret
 }
 
-// func mergeEnvFromSource(srcs ...[]corev1.EnvFromSource) []corev1.EnvFromSource {
-// 	ret := make([]corev1.EnvFromSource, 0)
+func mergeEnvFromSource(srcs ...[]corev1.EnvFromSource) []corev1.EnvFromSource {
+	ret := make([]corev1.EnvFromSource, 0)
 
-// 	for _, evs := range srcs {
-// 		ret = append(ret, evs...)
-// 	}
+	for _, evs := range srcs {
+		ret = append(ret, evs...)
+	}
 
-// 	return ret
-// }
+	return ret
+}
 
 func mergeEnvVar(envs ...[]corev1.EnvVar) []corev1.EnvVar {
 	idx := make(map[string]corev1.EnvVar)

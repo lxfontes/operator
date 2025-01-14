@@ -4,6 +4,7 @@
 resources:
 - bases/core.oam.dev_applications.yaml
 - bases/k8s.wasmcloud.dev_wasmcloudhostconfigs.yaml
+- bases/k8s.wasmcloud.dev_clusters.yaml
 - bases/k8s.wasmcloud.dev_hostgroups.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 

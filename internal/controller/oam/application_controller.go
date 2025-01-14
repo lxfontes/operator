@@ -33,8 +33,8 @@ import (
 	"go.wasmcloud.dev/x/wasmbus/wadm"
 )
 
-const applicationRefreshInterval = 5 * time.Second
-const applicationFinalizer = "k8s.wasmcloud.dev/application-finalizer"
+const refreshInterval = 5 * time.Second
+const finalizer = "k8s.wasmcloud.dev/application-finalizer"
 
 // ApplicationReconciler reconciles a Application object
 type ApplicationReconciler struct {
@@ -61,13 +61,13 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if !application.DeletionTimestamp.IsZero() {
 		// deletion timestamp is set.
 		// cleanup resources if we have a finalizer.
-		if controllerutil.ContainsFinalizer(&application, applicationFinalizer) {
+		if controllerutil.ContainsFinalizer(&application, finalizer) {
 			if err := r.finalize(ctx, &application); err != nil {
-				logger.Error(err, "unable to finalize application")
+				logger.Error(err, "unable to finalize")
 				return ctrl.Result{}, err
 			}
 
-			controllerutil.RemoveFinalizer(&application, applicationFinalizer)
+			controllerutil.RemoveFinalizer(&application, finalizer)
 			if err := r.Update(ctx, &application); err != nil {
 				return ctrl.Result{}, err
 			}
@@ -84,7 +84,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{RequeueAfter: applicationRefreshInterval}, nil
+	return ctrl.Result{RequeueAfter: refreshInterval}, nil
 }
 
 func (r *ApplicationReconciler) reconcileSpec(ctx context.Context, application *coreoamv1beta1.Application) error {
@@ -93,8 +93,8 @@ func (r *ApplicationReconciler) reconcileSpec(ctx context.Context, application *
 	}
 
 	// ensure finalizer
-	if !controllerutil.ContainsFinalizer(application, applicationFinalizer) {
-		controllerutil.AddFinalizer(application, applicationFinalizer)
+	if !controllerutil.ContainsFinalizer(application, finalizer) {
+		controllerutil.AddFinalizer(application, finalizer)
 		if err := r.Update(ctx, application); err != nil {
 			return err
 		}

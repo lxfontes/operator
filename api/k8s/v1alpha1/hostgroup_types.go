@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"go.wasmcloud.dev/operator/api/condition"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -30,28 +31,44 @@ type ContainerSpec struct {
 	EnvFrom                  []corev1.EnvFromSource        `json:"envFrom,omitempty"`
 	ImagePullSecrets         []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 	ImagePullPolicy          corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
-	Resources                corev1.ResourceRequirements   `json:"resources,omitempty"`
-	ContainerSecurityContext corev1.SecurityContext        `json:"containerSecurityContext,omitempty"`
+	Resources                *corev1.ResourceRequirements  `json:"resources,omitempty"`
+	ContainerSecurityContext *corev1.SecurityContext       `json:"containerSecurityContext,omitempty"`
 	ReadinessProbe           *corev1.Probe                 `json:"readinessProbe,omitempty"`
 	LivenessProbe            *corev1.Probe                 `json:"livenessProbe,omitempty"`
 	VolumeMounts             []corev1.VolumeMount          `json:"volumeMounts,omitempty"`
 }
 
-type ReplicaSpec struct {
-	Labels                       map[string]string                 `json:"labels,omitempty"`
-	Affinity                     *corev1.Affinity                  `json:"affinity,omitempty"`
-	AutomountServiceAccountToken *bool                             `json:"automountServiceAccountToken,omitempty"`
-	NodeSelector                 map[string]string                 `json:"nodeSelector,omitempty"`
-	Tolerations                  []corev1.Toleration               `json:"tolerations,omitempty"`
-	TopologySpreadConstraints    []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
-	SecurityContext              corev1.PodSecurityContext         `json:"securityContext,omitempty"`
-	InitContainers               []ContainerSpec                   `json:"initContainers,omitempty"`
-	Volumes                      []corev1.Volume                   `json:"volumes,omitempty"`
+type DaemonSpec struct {
+	// +kubebuilder:validation:Optional
+	Labels map[string]string `json:"labels,omitempty"`
+	// +kubebuilder:validation:Optional
+	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+	// +kubebuilder:validation:Optional
+	AutomountServiceAccountToken *bool `json:"automountServiceAccountToken,omitempty"`
+	// +kubebuilder:validation:Optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	// +kubebuilder:validation:Optional
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+	// +kubebuilder:validation:Optional
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+	// +kubebuilder:validation:Optional
+	SecurityContext *corev1.PodSecurityContext `json:"securityContext,omitempty"`
+	// +kubebuilder:validation:Optional
+	Volumes []corev1.Volume `json:"volumes,omitempty"`
+	// +kubebuilder:validation:Optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
+	// These are taken "as-is"
+	InitContainers []ContainerSpec `json:"initContainers,omitempty"`
+	Containers     []ContainerSpec `json:"containers,omitempty"`
 }
 
 // HostGroupSpec defines the desired state of HostGroup.
 type HostGroupSpec struct {
-	ReplicaSpec   `json:",inline"`
+	// +kubebuilder:validation:Required
+	Lattice string `json:"lattice,omitempty"`
+
+	DaemonSpec    `json:",inline"`
 	ContainerSpec `json:",inline"`
 	// +kubebuilder:validation:Optional
 	HostLabels map[string]string `json:"hostLabels,omitempty"`
@@ -59,7 +76,8 @@ type HostGroupSpec struct {
 
 // HostGroupStatus defines the observed state of HostGroup.
 type HostGroupStatus struct {
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	condition.ConditionedStatus `json:",inline"`
+	ObservedGeneration          int64 `json:"observedGeneration,omitempty"`
 }
 
 // +kubebuilder:object:root=true

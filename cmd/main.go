@@ -183,16 +183,30 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "WasmCloudHostConfig")
 		os.Exit(1)
 	}
-	if err = (&k8scontroller.ClusterReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+	if err = (&k8scontroller.PolicyReconciler{
+		Client:             mgr.GetClient(),
+		Scheme:             mgr.GetScheme(),
+		Bus:                bus,
+		ConfigMapNamespace: "wasmcloud-system",
+		ConfigMapName:      "policies",
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Cluster")
+		setupLog.Error(err, "unable to create controller", "controller", "PolicyReconciler")
+		os.Exit(1)
+	}
+
+	if err = (&k8scontroller.ConfigReconciler{
+		Client:  mgr.GetClient(),
+		Scheme:  mgr.GetScheme(),
+		Bus:     bus,
+		Lattice: "default",
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ConfigReconciler")
 		os.Exit(1)
 	}
 	if err = (&k8scontroller.HostGroupReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:       mgr.GetClient(),
+		Scheme:       mgr.GetScheme(),
+		DefaultImage: "ghcr.io/wasmcloud/wasmcloud:1.4.2",
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HostGroup")
 		os.Exit(1)
