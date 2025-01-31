@@ -57,7 +57,7 @@ type Condition struct {
 	LastTransitionTime metav1.Time `json:"lastTransitionTime"`
 
 	// A Reason for this condition's last transition from one status to another.
-	Reason ConditionReason `json:"reason"`
+	Reason ConditionReason `json:"reason,omitempty"`
 
 	// A Message containing details about this condition's last transition from
 	// one status to another, if any.

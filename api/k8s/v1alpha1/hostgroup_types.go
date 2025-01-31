@@ -38,7 +38,7 @@ type ContainerSpec struct {
 	VolumeMounts             []corev1.VolumeMount          `json:"volumeMounts,omitempty"`
 }
 
-type DaemonSpec struct {
+type ReplicaSpec struct {
 	// +kubebuilder:validation:Optional
 	Labels map[string]string `json:"labels,omitempty"`
 	// +kubebuilder:validation:Optional
@@ -65,13 +65,20 @@ type DaemonSpec struct {
 
 // HostGroupSpec defines the desired state of HostGroup.
 type HostGroupSpec struct {
-	// +kubebuilder:validation:Required
-	Lattice string `json:"lattice,omitempty"`
-
-	DaemonSpec    `json:",inline"`
+	ReplicaSpec   `json:",inline"`
 	ContainerSpec `json:",inline"`
+
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=1
+	Replicas int32 `json:"replicas,omitempty"`
 	// +kubebuilder:validation:Optional
 	HostLabels map[string]string `json:"hostLabels,omitempty"`
+	// NOTE(lxf): remove this or hardcode to default
+	// +kubebuilder:validation:Optional
+	// +kube:validation:Default="default"
+	Lattice string `json:"lattice,omitempty"`
+	// +kubebuilder:validation:Required
+	Cluster corev1.ObjectReference `json:"cluster,omitempty"`
 }
 
 // HostGroupStatus defines the observed state of HostGroup.
@@ -90,6 +97,14 @@ type HostGroup struct {
 
 	Spec   HostGroupSpec   `json:"spec,omitempty"`
 	Status HostGroupStatus `json:"status,omitempty"`
+}
+
+func (h *HostGroup) ServiceName() string {
+	return "hostgroup-" + h.GetName()
+}
+
+func (h *HostGroup) NatsClientSecret() string {
+	return h.GetName() + "-nats-client"
 }
 
 // +kubebuilder:object:root=true

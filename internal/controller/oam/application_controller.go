@@ -22,6 +22,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nkeys"
+	k8sv1alpha1 "go.wasmcloud.dev/operator/api/k8s/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -40,7 +45,6 @@ const finalizer = "k8s.wasmcloud.dev/application-finalizer"
 type ApplicationReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
-	Bus    wasmbus.Bus
 	// Which lattice to place Application objects.
 	// Will use the object namespace if blank.
 	// wasmcloud clusters usually operate on a single 'default' lattice.
@@ -110,7 +114,16 @@ func (r *ApplicationReconciler) reconcileSpec(ctx context.Context, application *
 		return err
 	}
 
-	c := r.wadmClient(application)
+	nc, err := NatsForCluster(
+		ctx,
+		r.Client,
+		&k8sv1alpha1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "example", Namespace: "default"}})
+	if err != nil {
+		return err
+	}
+	defer nc.Close()
+
+	c := r.wadmClient(wasmbus.NewNatsBus(nc), application)
 	putResp, err := c.ModelPut(ctx, &wadm.ModelPutRequest{
 		Manifest: *wadmManifest,
 	})
@@ -138,7 +151,16 @@ func (r *ApplicationReconciler) reconcileSpec(ctx context.Context, application *
 }
 
 func (r *ApplicationReconciler) reconcileStatus(ctx context.Context, application *coreoamv1beta1.Application) error {
-	c := r.wadmClient(application)
+	nc, err := NatsForCluster(
+		ctx,
+		r.Client,
+		&k8sv1alpha1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "example", Namespace: "default"}})
+	if err != nil {
+		return err
+	}
+	defer nc.Close()
+
+	c := r.wadmClient(wasmbus.NewNatsBus(nc), application)
 	req := &wadm.ModelStatusRequest{
 		Name: application.Name,
 	}
@@ -172,17 +194,22 @@ func (r *ApplicationReconciler) finalize(ctx context.Context, application *coreo
 		// never deployed, nothing to do
 		return nil
 	}
-
-	c := r.wadmClient(application)
-
-	_, err := c.ModelDelete(ctx, &wadm.ModelDeleteRequest{
-		Name: application.Name,
-	})
+	nc, err := NatsForCluster(
+		ctx,
+		r.Client,
+		&k8sv1alpha1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: "example", Namespace: "default"}})
 	if err != nil {
 		return err
 	}
+	defer nc.Close()
 
-	return nil
+	c := r.wadmClient(wasmbus.NewNatsBus(nc), application)
+
+	_, err = c.ModelDelete(ctx, &wadm.ModelDeleteRequest{
+		Name: application.Name,
+	})
+
+	return err
 }
 
 func (r *ApplicationReconciler) lattice(application *coreoamv1beta1.Application) string {
@@ -193,8 +220,8 @@ func (r *ApplicationReconciler) lattice(application *coreoamv1beta1.Application)
 	return lattice
 }
 
-func (r *ApplicationReconciler) wadmClient(application *coreoamv1beta1.Application) *wadm.Client {
-	return wadm.NewClient(r.Bus, r.lattice(application))
+func (r *ApplicationReconciler) wadmClient(bus wasmbus.Bus, application *coreoamv1beta1.Application) *wadm.Client {
+	return wadm.NewClient(bus, r.lattice(application))
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -208,4 +235,38 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func wadmStatusToPhase(status wadm.StatusType) coreoamv1beta1.ApplicationPhase {
 	// TODO(lxf): keeping this so we can translate the status from wadm to oam
 	return coreoamv1beta1.ApplicationPhase(status)
+}
+
+func NatsForCluster(ctx context.Context, apiClient client.Client, cluster *k8sv1alpha1.Cluster) (*nats.Conn, error) {
+	var creds corev1.Secret
+	if err := apiClient.Get(
+		ctx,
+		client.ObjectKey{Namespace: cluster.GetNamespace(), Name: "nats-" + cluster.GetName()},
+		&creds); err != nil {
+		return nil, err
+	}
+	rawCreds, ok := creds.Data["user.jwt"]
+	if !ok {
+		return nil, fmt.Errorf("missing user jwt")
+	}
+
+	jwt, err := nkeys.ParseDecoratedJWT(rawCreds)
+	if err != nil {
+		return nil, err
+	}
+	key, err := nkeys.ParseDecoratedNKey(rawCreds)
+	if err != nil {
+		return nil, err
+	}
+	seed, err := key.Seed()
+	if err != nil {
+		return nil, err
+	}
+
+	options := []nats.Option{
+		nats.UserJWTAndSeed(jwt, string(seed)),
+	}
+
+	return nats.Connect("nats://localhost:4223", options...)
+	//return nats.Connect("nats://nats-"+cluster.GetName()+"."+cluster.GetNamespace()+":4222", options...)
 }

@@ -22,6 +22,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -40,7 +41,6 @@ const (
 
 // HostGroupReconciler reconciles a HostGroup object
 type HostGroupReconciler struct {
-	DefaultImage string
 	client.Client
 	Scheme *runtime.Scheme
 }
@@ -79,22 +79,66 @@ func (r *HostGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
-	if err := r.reconcileSpec(ctx, &hostGroup); err != nil {
+	cluster, err := GetCluster(ctx, r.Client, hostGroup.Spec.Cluster.Namespace, hostGroup.Spec.Cluster.Name)
+	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	if err := r.reconcileStatus(ctx, &hostGroup); err != nil {
+	if err := r.reconcileCredentials(ctx, cluster, &hostGroup); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if err := r.reconcileSpec(ctx, cluster, &hostGroup); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if err := r.reconcileStatus(ctx, cluster, &hostGroup); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{RequeueAfter: refreshInterval}, nil
 }
 
-func (r *HostGroupReconciler) reconcileSpec(ctx context.Context, hostGroup *k8sv1alpha1.HostGroup) error {
-	if hostGroup.Status.ObservedGeneration == hostGroup.Generation {
-		return nil
+func GetCluster(ctx context.Context, apiClient client.Client, namespace string, name string) (*k8sv1alpha1.Cluster, error) {
+	var cluster k8sv1alpha1.Cluster
+	if err := apiClient.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &cluster); err != nil {
+		return nil, err
+	}
+	return &cluster, nil
+}
+
+func (r *HostGroupReconciler) reconcileCredentials(ctx context.Context, cluster *k8sv1alpha1.Cluster, hostGroup *k8sv1alpha1.HostGroup) error {
+	// for now simply copy the secret from the cluster
+	var sourceCreds corev1.Secret
+	if err := r.Client.Get(
+		ctx,
+		client.ObjectKey{Namespace: cluster.GetNamespace(), Name: cluster.NatsClientSecret()},
+		&sourceCreds); err != nil {
+		return err
 	}
 
+	destCreds := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            hostGroup.NatsClientSecret(),
+			Namespace:       hostGroup.GetNamespace(),
+			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(hostGroup, hostGroup.GroupVersionKind())},
+			Labels: map[string]string{
+				"host-cluster": cluster.ResourceLabel(),
+				"host-group":   hostGroup.GetName(),
+			},
+		},
+	}
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, destCreds, func() error {
+		destCreds.Data = map[string][]byte{
+			"user.jwt": sourceCreds.Data["user.jwt"],
+		}
+		return nil
+	})
+
+	return err
+}
+
+func (r *HostGroupReconciler) reconcileSpec(ctx context.Context, cluster *k8sv1alpha1.Cluster, hostGroup *k8sv1alpha1.HostGroup) error {
 	// ensure finalizer
 	if !controllerutil.ContainsFinalizer(hostGroup, finalizer) {
 		controllerutil.AddFinalizer(hostGroup, finalizer)
@@ -103,11 +147,11 @@ func (r *HostGroupReconciler) reconcileSpec(ctx context.Context, hostGroup *k8sv
 		}
 	}
 
-	if err := r.reconcileDaemonSet(ctx, hostGroup); err != nil {
+	if err := r.reconcileDeployment(ctx, cluster, hostGroup); err != nil {
 		return err
 	}
 
-	if err := r.reconcileHeadlessService(ctx, hostGroup); err != nil {
+	if err := r.reconcileHeadlessService(ctx, cluster, hostGroup); err != nil {
 		return err
 	}
 
@@ -123,13 +167,15 @@ func serviceCondition(tpy string) condition.Condition {
 	}
 }
 
-func (r *HostGroupReconciler) reconcileHeadlessService(ctx context.Context, hostGroup *k8sv1alpha1.HostGroup) error {
+func (r *HostGroupReconciler) reconcileHeadlessService(ctx context.Context, cluster *k8sv1alpha1.Cluster, hostGroup *k8sv1alpha1.HostGroup) error {
 	wantLabels := map[string]string{
-		"host-group": hostGroup.GetName(),
+		"host-cluster": cluster.ResourceLabel(),
+		"host-group":   hostGroup.GetName(),
 	}
 
 	defaultLabels := map[string]string{
-		"host-group": hostGroup.GetName(),
+		"host-cluster": cluster.ResourceLabel(),
+		"host-group":   hostGroup.GetName(),
 	}
 
 	spec := corev1.ServiceSpec{
@@ -139,17 +185,16 @@ func (r *HostGroupReconciler) reconcileHeadlessService(ctx context.Context, host
 
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      hostGroup.GetName(),
-			Namespace: "wasmcloud-system",
-			Labels:    mergeLabels(hostGroup.Spec.Labels, defaultLabels),
+			Name:            hostGroup.ServiceName(),
+			Namespace:       hostGroup.GetNamespace(),
+			Labels:          mergeLabels(hostGroup.Spec.Labels, defaultLabels),
+			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(hostGroup, hostGroup.GroupVersionKind())},
 		},
 		Spec: spec,
 	}
 
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, service, func() error {
 		service.Spec = spec
-		// labels might have been modified elsewhere, so merge them
-		service.SetLabels(mergeLabels(service.GetLabels(), hostGroup.Spec.Labels, defaultLabels))
 		return nil
 	})
 
@@ -160,13 +205,15 @@ func (r *HostGroupReconciler) reconcileHeadlessService(ctx context.Context, host
 	return err
 }
 
-func (r *HostGroupReconciler) reconcileDaemonSet(ctx context.Context, hostGroup *k8sv1alpha1.HostGroup) error {
+func (r *HostGroupReconciler) reconcileDeployment(ctx context.Context, cluster *k8sv1alpha1.Cluster, hostGroup *k8sv1alpha1.HostGroup) error {
 	wantLabels := map[string]string{
-		"host-group": hostGroup.GetName(),
+		"host-cluster": cluster.ResourceLabel(),
+		"host-group":   hostGroup.GetName(),
 	}
 
 	defaultLabels := map[string]string{
-		"host-group": hostGroup.GetName(),
+		"host-cluster": cluster.ResourceLabel(),
+		"host-group":   hostGroup.GetName(),
 	}
 
 	defaultEnv := []corev1.EnvVar{
@@ -218,18 +265,6 @@ func (r *HostGroupReconciler) reconcileDaemonSet(ctx context.Context, hostGroup 
 			Value: "default",
 		},
 		{
-			Name:  "WASMCLOUD_LATTICE",
-			Value: "default",
-		},
-		{
-			Name:  "WASMCLOUD_NATS_HOST",
-			Value: "nats",
-		},
-		{
-			Name:  "WASMCLOUD_NATS_PORT",
-			Value: "4222",
-		},
-		{
 			Name:  "WASMCLOUD_RPC_TIMEOUT_MS",
 			Value: "4000",
 		},
@@ -241,6 +276,26 @@ func (r *HostGroupReconciler) reconcileDaemonSet(ctx context.Context, hostGroup 
 			Name:  "WASMCLOUD_LABEL_kubernetes.hostgroup",
 			Value: hostGroup.GetName(),
 		},
+		{
+			Name:  "WASMCLOUD_HTTP_ADMIN",
+			Value: "0.0.0.0:9090",
+		},
+		{
+			Name:  "WASMCLOUD_NATS_CREDS",
+			Value: "/creds/user.jwt",
+		},
+		{
+			Name:  "WASMCLOUD_LATTICE",
+			Value: "default",
+		},
+		{
+			Name:  "WASMCLOUD_NATS_HOST",
+			Value: cluster.NatsHost(),
+		},
+		{
+			Name:  "WASMCLOUD_NATS_PORT",
+			Value: "4222",
+		},
 	}
 
 	volumes := []corev1.Volume{
@@ -250,6 +305,14 @@ func (r *HostGroupReconciler) reconcileDaemonSet(ctx context.Context, hostGroup 
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
+		{
+			Name: "creds",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: hostGroup.NatsClientSecret(),
+				},
+			},
+		},
 	}
 
 	defaultMounts := []corev1.VolumeMount{
@@ -257,15 +320,19 @@ func (r *HostGroupReconciler) reconcileDaemonSet(ctx context.Context, hostGroup 
 			Name:      "wasmcloud-share",
 			MountPath: "/share",
 		},
+		{
+			Name:      "creds",
+			MountPath: "/creds",
+		},
 	}
 
 	image := hostGroup.Spec.Image
 	if image == "" {
-		image = r.DefaultImage
+		image = "ghcr.io/wasmcloud/wasmcloud:canary"
 	}
 
 	hostContainer := corev1.Container{
-		Name:         "wasmcloud",
+		Name:         "host",
 		Image:        image,
 		Command:      hostGroup.Spec.Command,
 		Args:         hostGroup.Spec.Args,
@@ -273,6 +340,15 @@ func (r *HostGroupReconciler) reconcileDaemonSet(ctx context.Context, hostGroup 
 		EnvFrom:      mergeEnvFromSource(hostGroup.Spec.EnvFrom),
 		Env:          mergeEnvVar(hostGroup.Spec.Env, defaultEnv),
 		VolumeMounts: mergeMounts(defaultMounts, hostGroup.Spec.VolumeMounts),
+		LivenessProbe: &corev1.Probe{
+			PeriodSeconds: 3,
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/livez",
+					Port: intstr.FromInt(9090),
+				},
+			},
+		},
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "metrics",
@@ -301,70 +377,41 @@ func (r *HostGroupReconciler) reconcileDaemonSet(ctx context.Context, hostGroup 
 		},
 	}
 
-	spec := appsv1.DaemonSetSpec{
+	spec := appsv1.DeploymentSpec{
 		Selector: &metav1.LabelSelector{
 			MatchLabels: wantLabels,
 		},
 		Template: podTemplate,
+		Replicas: &hostGroup.Spec.Replicas,
 	}
 
-	daemonset := &appsv1.DaemonSet{
+	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      hostGroup.GetName(),
-			Namespace: "wasmcloud-system",
-			Labels:    mergeLabels(hostGroup.Spec.Labels, defaultLabels),
+			Name:            hostGroup.GetName(),
+			Namespace:       hostGroup.GetNamespace(),
+			Labels:          mergeLabels(hostGroup.Spec.Labels, defaultLabels),
+			OwnerReferences: []metav1.OwnerReference{*metav1.NewControllerRef(hostGroup, hostGroup.GroupVersionKind())},
 		},
-		Spec: spec,
 	}
 
-	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, daemonset, func() error {
-		daemonset.Spec = spec
-		// labels might have been modified elsewhere, so merge them
-		daemonset.SetLabels(mergeLabels(daemonset.GetLabels(), hostGroup.Spec.Labels, defaultLabels))
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, deployment, func() error {
+		deployment.Spec = spec
 		return nil
 	})
 
-	cond := serviceCondition("DaemonsetReady")
+	cond := serviceCondition("DeploymentReady")
 	cond.Status = corev1.ConditionTrue
 	hostGroup.Status.SetConditions(cond)
 
 	return err
 }
 
-func (r *HostGroupReconciler) reconcileStatus(ctx context.Context, hostGroup *k8sv1alpha1.HostGroup) error {
+func (r *HostGroupReconciler) reconcileStatus(ctx context.Context, cluster *k8sv1alpha1.Cluster, hostGroup *k8sv1alpha1.HostGroup) error {
 	// get status from kube daemonset + lattice cache
 	return nil
 }
 
 func (r *HostGroupReconciler) finalize(ctx context.Context, hostGroup *k8sv1alpha1.HostGroup) error {
-	daemonset := &appsv1.DaemonSet{}
-	if err := r.Get(ctx, client.ObjectKey{Namespace: "wasmcloud-system", Name: hostGroup.GetName()}, daemonset); err != nil {
-		if client.IgnoreNotFound(err) != nil {
-			return err
-		}
-	}
-	if daemonset.GetUID() != "" {
-		if err := r.Delete(ctx, daemonset); err != nil {
-			if client.IgnoreNotFound(err) != nil {
-				return err
-			}
-		}
-	}
-
-	service := &corev1.Service{}
-	if err := r.Get(ctx, client.ObjectKey{Namespace: "wasmcloud-system", Name: hostGroup.GetName()}, service); err != nil {
-		if client.IgnoreNotFound(err) != nil {
-			return err
-		}
-	}
-	if service.GetUID() != "" {
-		if err := r.Delete(ctx, service); err != nil {
-			if client.IgnoreNotFound(err) != nil {
-				return err
-			}
-		}
-	}
-
 	return nil
 }
 

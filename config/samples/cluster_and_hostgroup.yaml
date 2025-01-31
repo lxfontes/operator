@@ -1,0 +1,43 @@
+apiVersion: k8s.wasmcloud.dev/v1alpha1
+kind: Cluster
+metadata:
+  name: example
+  # NOTE THE NAMESPACE
+  namespace: wasmcloud-system
+spec:
+  nats:
+    managed:
+      replicas: 3
+  wadm:
+    managed:
+      replicas: 1
+---
+apiVersion: k8s.wasmcloud.dev/v1alpha1
+kind: HostGroup
+metadata:
+  name: providers
+  namespace: wasmcloud-system
+spec:
+  cluster:
+    # NOTE: no namespace
+    name: example
+  replicas: 1
+  env:
+    - name: WASMCLOUD_COMPONENT_AUCTION_ENABLED
+      value: "false"
+---
+apiVersion: k8s.wasmcloud.dev/v1alpha1
+kind: HostGroup
+metadata:
+  name: frontend
+  # NOTE: namespace
+  namespace: payment-service
+spec:
+  cluster:
+    name: example
+    # NOTE: namespace
+    namespace: wasmcloud-system
+  replicas: 1
+  env:
+    - name: WASMCLOUD_PROVIDER_AUCTION_ENABLED
+      value: "false"

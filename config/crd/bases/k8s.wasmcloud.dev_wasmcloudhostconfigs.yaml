@@ -2105,7 +2105,6 @@ spec:
                       type: string
                   required:
                   - lastTransitionTime
-                  - reason
                   - status
                   - type
                   type: object

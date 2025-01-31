@@ -1,0 +1,14 @@
+apiVersion: k8s.wasmcloud.dev/v1alpha1
+kind: Cluster
+metadata:
+  name: example
+spec:
+  nats:
+    managed:
+      replicas: 3
+  wadm:
+    managed:
+      replicas: 1
+  addons:
+    prometheus:
+      replicas: 1

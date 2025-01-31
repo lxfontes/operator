@@ -33,7 +33,6 @@ type ConfigReconciler struct {
 	client.Client
 
 	Lattice string
-	Bus     wasmbus.Bus
 	Scheme  *runtime.Scheme
 
 	configServer *configServer
@@ -46,7 +45,11 @@ func (r *ConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 // SetupWithManager sets up the controller with the Manager.
 func (r *ConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	var err error
-	r.configServer = newConfigServer(r.Bus, "default")
+	// TODO(lxf): hook this back up
+	if true {
+		return nil
+	}
+	r.configServer = newConfigServer(nil, "default")
 
 	if err = mgr.Add(r.configServer); err != nil {
 		return err

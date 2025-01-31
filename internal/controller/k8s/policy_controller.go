@@ -36,7 +36,6 @@ import (
 // PolicyReconciler reconciles a Policy object
 type PolicyReconciler struct {
 	client.Client
-	Bus                wasmbus.Bus
 	Scheme             *runtime.Scheme
 	ConfigMapNamespace string
 	ConfigMapName      string
@@ -85,7 +84,11 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 // SetupWithManager sets up the controller with the Manager.
 func (r *PolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	var err error
-	r.policyServer = newPolicyServer(r.Bus, "wasmcloud.policy")
+	// TODO(lxf): hook this back up
+	if true {
+		return nil
+	}
+	r.policyServer = newPolicyServer(nil, "wasmcloud.policy")
 
 	if err = mgr.Add(r.policyServer); err != nil {
 		return err

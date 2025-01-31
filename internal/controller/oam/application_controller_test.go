@@ -68,9 +68,9 @@ var _ = Describe("Application Controller", func() {
 
 			By("Reconciling the created resource")
 			controllerReconciler := &ApplicationReconciler{
-				Client:  k8sClient,
-				Scheme:  k8sClient.Scheme(),
-				Bus:     bus,
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				//				Bus:     bus,
 				Lattice: "default",
 			}
 
@@ -115,9 +115,9 @@ var _ = Describe("Application Controller", func() {
 
 			By("Reconciling the created resource until it is ready")
 			controllerReconciler := &ApplicationReconciler{
-				Client:  k8sClient,
-				Scheme:  k8sClient.Scheme(),
-				Bus:     bus,
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				//	Bus:     bus,
 				Lattice: "default",
 			}
 

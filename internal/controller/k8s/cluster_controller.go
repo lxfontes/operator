@@ -25,6 +25,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	k8sv1alpha1 "go.wasmcloud.dev/operator/api/k8s/v1alpha1"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // ClusterReconciler reconciles a Cluster object
@@ -43,12 +45,8 @@ type ClusterReconciler struct {
 // +kubebuilder:rbac:groups=apps,resources=statefulsets/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps,resources=statefulsets/finalizers,verbs=update
 
-// +kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=services/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=core,resources=services/finalizers,verbs=update
-
-// +kubebuilder:rbac:groups=core,resources=secrets;configmaps,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=secrets;configmaps/finalizers,verbs=update
+// +kubebuilder:rbac:groups=core,resources=secrets;configmaps;services,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=secrets/finalizers;configmaps/finalizers;services/finalizers,verbs=update
 func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
@@ -62,13 +60,30 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, nil
 	}
 
-	// addons deployment
-	// wadm
-	// nats
-	// hostgroups
+	// if err := r.reconcileCertificateAuthority(ctx, &cluster); err != nil {
+	// 	logger.Error(err, "Failed to reconcile certificates")
+	// 	return ctrl.Result{}, err
+	// }
 
-	// TODO(user): your logic here
-	logger.Info("Reconciling Cluster")
+	if err := r.reconcileNats(ctx, &cluster); err != nil {
+		logger.Error(err, "Failed to reconcile nats")
+		return ctrl.Result{}, err
+	}
+
+	if err := r.reconcileWadm(ctx, &cluster); err != nil {
+		logger.Error(err, "Failed to reconcile wadm")
+		return ctrl.Result{}, err
+	}
+
+	// if err := r.reconcileHostGroups(ctx, &cluster); err != nil {
+	// 	logger.Error(err, "Failed to reconcile hostgroups")
+	// 	return ctrl.Result{}, err
+	// }
+
+	if err := r.reconcileAddons(ctx, &cluster); err != nil {
+		logger.Error(err, "Failed to reconcile addons")
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -78,5 +93,9 @@ func (r *ClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&k8sv1alpha1.Cluster{}).
 		Named("k8s-cluster").
+		Owns(&corev1.Secret{}).
+		Owns(&corev1.ConfigMap{}).
+		Owns(&appsv1.StatefulSet{}).
+		Owns(&appsv1.Deployment{}).
 		Complete(r)
 }

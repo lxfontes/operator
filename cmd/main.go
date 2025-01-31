@@ -35,8 +35,6 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"go.wasmcloud.dev/x/wasmbus"
-
 	k8sv1alpha1 "go.wasmcloud.dev/operator/api/k8s/v1alpha1"
 	coreoamv1beta1 "go.wasmcloud.dev/operator/api/oam/core/v1beta1"
 	k8scontroller "go.wasmcloud.dev/operator/internal/controller/k8s"
@@ -159,18 +157,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	nc, err := wasmbus.NatsConnect("nats://localhost:4222")
-	if err != nil {
-		setupLog.Error(err, "unable to connect to nats")
-		os.Exit(1)
-	}
-
-	bus := wasmbus.NewNatsBus(nc)
-
 	if err = (&oamcontroller.ApplicationReconciler{
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
-		Bus:     bus,
 		Lattice: lattice,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Application")
@@ -186,7 +175,6 @@ func main() {
 	if err = (&k8scontroller.PolicyReconciler{
 		Client:             mgr.GetClient(),
 		Scheme:             mgr.GetScheme(),
-		Bus:                bus,
 		ConfigMapNamespace: "wasmcloud-system",
 		ConfigMapName:      "policies",
 	}).SetupWithManager(mgr); err != nil {
@@ -197,18 +185,23 @@ func main() {
 	if err = (&k8scontroller.ConfigReconciler{
 		Client:  mgr.GetClient(),
 		Scheme:  mgr.GetScheme(),
-		Bus:     bus,
 		Lattice: "default",
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ConfigReconciler")
 		os.Exit(1)
 	}
 	if err = (&k8scontroller.HostGroupReconciler{
-		Client:       mgr.GetClient(),
-		Scheme:       mgr.GetScheme(),
-		DefaultImage: "ghcr.io/wasmcloud/wasmcloud:1.4.2",
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "HostGroup")
+		os.Exit(1)
+	}
+	if err = (&k8scontroller.ClusterReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Cluster")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

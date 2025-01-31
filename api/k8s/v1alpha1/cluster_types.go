@@ -22,14 +22,29 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type NatsManagedSpec struct {
+	ReplicaSpec   `json:",inline"`
+	ContainerSpec `json:",inline"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=3
+	Replicas int32 `json:"replicas,omitempty"`
+}
 type NatsSpec struct {
 	// +kubebuilder:validation:Optional
-	Managed *bool `json:"managed,omitempty"`
+	Managed *NatsManagedSpec `json:"managed,omitempty"`
+}
+
+type WadmManagedSpec struct {
+	ReplicaSpec   `json:",inline"`
+	ContainerSpec `json:",inline"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=1
+	Replicas int32 `json:"replicas,omitempty"`
 }
 
 type WadmSpec struct {
 	// +kubebuilder:validation:Optional
-	Managed *bool `json:"managed,omitempty"`
+	Managed *WadmManagedSpec `json:"managed,omitempty"`
 }
 
 type PolicySpec struct {
@@ -42,19 +57,45 @@ type SecretSpec struct {
 	Disable bool `json:"managed,omitempty"`
 }
 
+type PrometheusSpec struct {
+	ReplicaSpec   `json:",inline"`
+	ContainerSpec `json:",inline"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=1
+	Replicas int32 `json:"replicas,omitempty"`
+}
+
 type ClusterAddons struct {
-	Policy PolicySpec `json:"policy,omitempty"`
-	Secret SecretSpec `json:"secret,omitempty"`
+	Prometheus *PrometheusSpec `json:"prometheus,omitempty"`
+	Policy     *PolicySpec     `json:"policy,omitempty"`
+	Secret     *SecretSpec     `json:"secret,omitempty"`
 	// Config Service?
 	// Observability configuration
 	// Certificates configuration?
 }
 
+type HostSpec struct {
+	ReplicaSpec   `json:",inline"`
+	ContainerSpec `json:",inline"`
+
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=1
+	Replicas int32 `json:"replicas,omitempty"`
+	// +kubebuilder:validation:Optional
+	HostLabels map[string]string `json:"hostLabels,omitempty"`
+}
+
 // ClusterSpec defines the desired state of Cluster.
 type ClusterSpec struct {
-	Nats   NatsSpec      `json:"nats"`
-	Wadm   WadmSpec      `json:"wadm"`
-	Addons ClusterAddons `json:"addons"`
+	Nats NatsSpec `json:"nats"`
+	// +kubebuilder:validation:Optional
+	Wadm WadmSpec `json:"wadm"`
+	// +kubebuilder:validation:Optional
+	Hosts []HostSpec `json:"hosts,omitempty"`
+	// +kubebuilder:validation:Optional
+	Addons *ClusterAddons `json:"addons"`
 }
 
 type NatsStatus struct {
@@ -82,6 +123,21 @@ type Cluster struct {
 
 	Spec   ClusterSpec   `json:"spec,omitempty"`
 	Status ClusterStatus `json:"status,omitempty"`
+}
+
+func (c *Cluster) ResourceLabel() string {
+	return c.GetName() + "." + c.GetNamespace()
+}
+
+func (c *Cluster) NatsSeedSecret() string {
+	return c.GetName() + "-nats-seed"
+}
+
+func (c *Cluster) NatsClientSecret() string {
+	return c.GetName() + "-nats-client"
+}
+func (c *Cluster) NatsHost() string {
+	return "nats-" + c.GetName() + "." + c.GetNamespace() + ".svc"
 }
 
 // +kubebuilder:object:root=true

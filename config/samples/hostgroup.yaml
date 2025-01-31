@@ -1,0 +1,9 @@
+apiVersion: k8s.wasmcloud.dev/v1alpha1
+kind: HostGroup
+metadata:
+  name: detached
+spec:
+  cluster:
+    name: example
+    namespace: default
+  replicas: 1
